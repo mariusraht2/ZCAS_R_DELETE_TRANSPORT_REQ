@@ -156,6 +156,10 @@ CLASS zz_cl_delete_transport_request IMPLEMENTATION.
       WHERE as4user EQ @mv_user
         AND trkorr  IN @it_r_trkorr.
 
+    IF lt_sel_requests IS INITIAL.
+      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
+    ENDIF.
+
     " Get all valid open parent requests
     SELECT *
       FROM e070
@@ -164,10 +168,14 @@ CLASS zz_cl_delete_transport_request IMPLEMENTATION.
         AND strkorr  EQ @space
         AND trstatus EQ 'D'.
 
+    IF lt_all_parent_requests IS INITIAL.
+      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
+    ENDIF.
+
     DATA(lt_r_all_parent_requests) = VALUE rseloption( FOR <line1> IN lt_all_parent_requests
-                                                       ( sign   = 'I'
-                                                         option = 'EQ'
-                                                         low    = <line1>-trkorr ) ).
+                                                   ( sign   = 'I'
+                                                     option = 'EQ'
+                                                     low    = <line1>-trkorr ) ).
 
     " Get all selected parent requests which are valid
     DATA(lt_sel_parent_requests) = VALUE t_e070( FOR <line3> IN lt_sel_requests
@@ -207,9 +215,7 @@ CLASS zz_cl_delete_transport_request IMPLEMENTATION.
           lt_r_sel_child_requests.
 
     IF mt_trkorr IS INITIAL.
-
-      MESSAGE 'No valid open transport request could be found.' TYPE 'W' DISPLAY LIKE 'I'.
-
+      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
     ENDIF.
 
   ENDMETHOD.
