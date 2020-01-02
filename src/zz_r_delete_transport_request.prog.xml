@@ -16,6 +16,26 @@
      <ENTRY>Delete Transport Request</ENTRY>
      <LENGTH>24</LENGTH>
     </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_DELSTR</KEY>
+     <ENTRY>Delete all sub requests (Y/N)?</ENTRY>
+     <LENGTH>38</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>P_USER</KEY>
+     <ENTRY>.</ENTRY>
+     <LENGTH>13</LENGTH>
+     <SPLIT>D</SPLIT>
+    </item>
+    <item>
+     <ID>S</ID>
+     <KEY>SO_TR</KEY>
+     <ENTRY>.</ENTRY>
+     <LENGTH>20</LENGTH>
+     <SPLIT>D</SPLIT>
+    </item>
    </TPOOL>
   </asx:values>
  </asx:abap>
