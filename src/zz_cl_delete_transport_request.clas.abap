@@ -17,48 +17,50 @@ CLASS zz_cl_delete_transport_request DEFINITION
 
   PROTECTED SECTION.
   PRIVATE SECTION.
+    TYPES: t_e070 TYPE TABLE OF e070 WITH DEFAULT KEY.
+
     CLASS-DATA: mo_instance   TYPE REF TO zz_cl_delete_transport_request,
                 mv_user       TYPE as4user,
-                mt_r_trkorr   TYPE rseloption,
-                mt_r_strkorr  TYPE rseloption,
+                mt_trkorr     TYPE TABLE OF e070 WITH DEFAULT KEY,
                 mt_log        TYPE log_message_t,
                 mo_salv_table TYPE REF TO cl_salv_table.
 
     METHODS:
       delete_tr,
-      read_tr,
+      read_tr
+        IMPORTING it_r_trkorr TYPE rseloption,
       unlock_tr,
       show_log,
+      reopen_tr,
       on_function_click_log_alv FOR EVENT added_function OF cl_salv_events_table
         IMPORTING e_salv_function .
 ENDCLASS.
 
 
 
-CLASS ZZ_CL_DELETE_TRANSPORT_REQUEST IMPLEMENTATION.
+CLASS zz_cl_delete_transport_request IMPLEMENTATION.
 
 
   METHOD delete_tr.
 
-    LOOP AT mt_r_strkorr ASSIGNING FIELD-SYMBOL(<ls_r_strkorr>).
-
-      DATA(lv_trkorr) = CONV trkorr( <ls_r_strkorr>-low ).
+    LOOP AT mt_trkorr ASSIGNING FIELD-SYMBOL(<ls_strkorr>) WHERE strkorr CO ' _0'.
 
       CALL FUNCTION 'TR_DELETE_COMM'
         EXPORTING
           wi_dialog = abap_false
-          wi_trkorr = lv_trkorr
+          wi_trkorr = <ls_strkorr>-trkorr
         EXCEPTIONS
           OTHERS    = 1.
 
       CASE sy-subrc.
         WHEN 0.
           APPEND VALUE #( type    = 'S'
-                          message = |Transport request { lv_trkorr } and its sub requests were successfully deleted.|  ) TO mt_log.
+                          message = |Transport request { <ls_strkorr>-trkorr } and its sub requests were successfully deleted.|  ) TO mt_log.
 
         WHEN OTHERS.
           APPEND VALUE #( type    = 'W'
-                          message = |Transport request { lv_trkorr } and its sub requests couldn't be deleted.|  ) TO mt_log.
+                          message = |Transport request { <ls_strkorr>-trkorr } and its sub requests couldn't be deleted.|  ) TO mt_log.
+          CONTINUE.
 
       ENDCASE.
 
@@ -72,9 +74,9 @@ CLASS ZZ_CL_DELETE_TRANSPORT_REQUEST IMPLEMENTATION.
     CLEAR: mt_log.
 
     mv_user     = iv_user.
-    mt_r_trkorr = it_r_trkorr.
 
-    read_tr( ).
+    read_tr( it_r_trkorr ).
+    reopen_tr( ).
     unlock_tr( ).
     delete_tr( ).
 
@@ -140,46 +142,72 @@ CLASS ZZ_CL_DELETE_TRANSPORT_REQUEST IMPLEMENTATION.
 
   METHOD read_tr.
 
-    DATA: lt_e070 TYPE TABLE OF e070 WITH DEFAULT KEY.
+    CHECK mv_user CN ' _0'
+      AND it_r_trkorr IS NOT INITIAL.
 
-    CHECK mt_r_trkorr IS NOT INITIAL.
+    " Scenarios:
+    " > Delete parent requests (mode == 'D') and its child requests
+    " > Delete single child requests (mode of parent request == 'D')
 
+    " Get all selected requests
     SELECT *
       FROM e070
-      INTO TABLE @lt_e070
-      WHERE trstatus EQ 'D'
-        AND as4user  EQ @mv_user
-        AND (    trkorr  IN @mt_r_trkorr
-              OR strkorr IN @mt_r_trkorr ).
+      INTO TABLE @DATA(lt_sel_requests)
+      WHERE as4user EQ @mv_user
+        AND trkorr  IN @it_r_trkorr.
 
-    mt_r_strkorr = VALUE rseloption( FOR <line1> IN lt_e070 WHERE ( strkorr CN ' _0' ) ( sign   = 'I'
-                                                                                         option = 'EQ'
-                                                                                         low    = <line1>-strkorr ) ).
+    " Get all valid open parent requests
+    SELECT *
+      FROM e070
+      INTO TABLE @DATA(lt_all_parent_requests)
+      WHERE as4user  EQ @mv_user
+        AND strkorr  EQ @space
+        AND trstatus EQ 'D'.
 
-    IF mt_r_strkorr IS NOT INITIAL.
+    DATA(lt_r_all_parent_requests) = VALUE rseloption( FOR <line1> IN lt_all_parent_requests
+                                                       ( sign   = 'I'
+                                                         option = 'EQ'
+                                                         low    = <line1>-trkorr ) ).
 
-      SELECT *
-        FROM e070
-        APPENDING TABLE @lt_e070
-        WHERE trstatus EQ 'D'
-          AND as4user  EQ @mv_user
-          AND (    trkorr  IN @mt_r_strkorr
-                OR strkorr IN @mt_r_strkorr ).
+    " Get all selected parent requests which are valid
+    DATA(lt_sel_parent_requests) = VALUE t_e070( FOR <line3> IN lt_sel_requests
+                                                 WHERE (     strkorr CO ' _0'
+                                                         AND trkorr IN lt_r_all_parent_requests )
+                                                 ( <line3> ) ).
 
-    ENDIF.
+    DATA(lt_r_sel_parent_requests) = VALUE rseloption( FOR <line2> IN lt_sel_parent_requests
+                                                       ( sign   = 'I'
+                                                         option = 'EQ'
+                                                         low    = <line2>-trkorr ) ).
 
-    IF lt_e070 IS NOT INITIAL.
+    " Get all selected child requests which are valid
+    DATA(lt_sel_child_requests) = VALUE t_e070( FOR <line3> IN lt_sel_requests
+                                            WHERE (     strkorr CN ' _0'
+                                                    AND strkorr IN lt_r_all_parent_requests )
+                                            ( <line3> ) ).
 
-      SORT lt_e070 BY trkorr.
-      DELETE ADJACENT DUPLICATES FROM lt_e070.
+    DATA(lt_r_sel_child_requests) = VALUE rseloption( FOR <line2> IN lt_sel_child_requests
+                                                       ( sign   = 'I'
+                                                         option = 'EQ'
+                                                         low    = <line2>-trkorr ) ).
 
-      mt_r_trkorr = VALUE #( FOR <line2> IN lt_e070 ( sign   = 'I'
-                                                      option = 'EQ'
-                                                      low    = <line2>-trkorr ) ).
+    " Get child requests by selected parent requests
+    SELECT *
+      FROM e070
+      APPENDING TABLE @lt_sel_child_requests
+      WHERE as4user EQ @mv_user
+        AND strkorr IN @lt_r_sel_parent_requests
+        AND trkorr  NOT IN @lt_r_sel_child_requests.
 
-    ELSE.
+    APPEND LINES OF: lt_sel_parent_requests TO mt_trkorr,
+                     lt_sel_child_requests  TO mt_trkorr.
 
-      CLEAR: mt_r_trkorr, mt_r_strkorr.
+    FREE: lt_sel_requests, lt_sel_child_requests, lt_all_parent_requests,
+          lt_r_all_parent_requests, lt_sel_parent_requests, lt_r_sel_parent_requests,
+          lt_r_sel_child_requests.
+
+    IF mt_trkorr IS INITIAL.
+
       MESSAGE 'No valid open transport request could be found.' TYPE 'W' DISPLAY LIKE 'I'.
 
     ENDIF.
@@ -265,28 +293,60 @@ CLASS ZZ_CL_DELETE_TRANSPORT_REQUEST IMPLEMENTATION.
 
   METHOD unlock_tr.
 
-    LOOP AT mt_r_trkorr ASSIGNING FIELD-SYMBOL(<ls_r_trkorr>).
-
-      DATA(lv_trkorr) = CONV trkorr( <ls_r_trkorr>-low ).
+    LOOP AT mt_trkorr ASSIGNING FIELD-SYMBOL(<ls_trkorr>).
 
       CALL FUNCTION 'TRINT_UNLOCK_COMM'
         EXPORTING
-          wi_trkorr = lv_trkorr
+          wi_trkorr = <ls_trkorr>-trkorr
         EXCEPTIONS
           OTHERS    = 1.
 
       CASE sy-subrc.
         WHEN 0.
           APPEND VALUE #( type    = 'S'
-                          message = |Transport request { lv_trkorr } was successfully unlocked.|  ) TO mt_log.
+                          message = |Transport request { <ls_trkorr>-trkorr } was successfully unlocked.|  ) TO mt_log.
 
         WHEN OTHERS.
           APPEND VALUE #( type    = 'W'
-                          message = |Transport request { lv_trkorr } couldn't be unlocked.|  ) TO mt_log.
+                          message = |Transport request { <ls_trkorr>-trkorr } couldn't be unlocked.|  ) TO mt_log.
+          CONTINUE.
 
       ENDCASE.
 
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD reopen_tr.
+
+    DATA: lv_jobname  TYPE tbtco-jobname VALUE 'DELETE_TR',
+          lv_jobcount TYPE tbtco-jobcount.
+
+    LOOP AT mt_trkorr ASSIGNING FIELD-SYMBOL(<ls_strkorr>) WHERE strkorr  CN ' _0'
+                                                             AND trstatus EQ 'R'.
+
+      <ls_strkorr>-trstatus = 'D'.
+      <ls_strkorr>-as4date = sy-datum.
+      <ls_strkorr>-as4time = sy-uzeit.
+      <ls_strkorr>-as4user = sy-uname.
+      UPDATE e070 FROM <ls_strkorr>.
+
+      CASE sy-subrc.
+        WHEN 0.
+          APPEND VALUE #( type    = 'S'
+                          message = |Transport request { <ls_strkorr>-trkorr } was successfully reopened.|  ) TO mt_log.
+
+        WHEN OTHERS.
+          APPEND VALUE #( type    = 'E'
+                          message = |Transport request { <ls_strkorr>-trkorr } couldn't be reopened.|  ) TO mt_log.
+          CONTINUE.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    COMMIT WORK AND WAIT.
 
   ENDMETHOD.
 ENDCLASS.
