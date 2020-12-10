@@ -1,11 +1,11 @@
-CLASS zz_cl_delete_transport_request DEFINITION
+CLASS zcas_cl_delete_transport_req DEFINITION
   PUBLIC
   FINAL
   CREATE PRIVATE .
 
   PUBLIC SECTION.
     CLASS-METHODS get_instance
-      RETURNING VALUE(ro_instance) TYPE REF TO zz_cl_delete_transport_request.
+      RETURNING VALUE(ro_instance) TYPE REF TO zcas_cl_delete_transport_req.
 
     METHODS:
       execute
@@ -19,7 +19,7 @@ CLASS zz_cl_delete_transport_request DEFINITION
   PRIVATE SECTION.
     TYPES: t_e070 TYPE TABLE OF e070 WITH DEFAULT KEY.
 
-    CLASS-DATA: mo_instance   TYPE REF TO zz_cl_delete_transport_request,
+    CLASS-DATA: mo_instance   TYPE REF TO zcas_cl_delete_transport_req,
                 mv_user       TYPE as4user,
                 mt_trkorr     TYPE TABLE OF e070 WITH DEFAULT KEY,
                 mt_log        TYPE log_message_t,
@@ -38,7 +38,7 @@ ENDCLASS.
 
 
 
-CLASS zz_cl_delete_transport_request IMPLEMENTATION.
+CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
 
   METHOD delete_tr.
@@ -89,7 +89,7 @@ CLASS zz_cl_delete_transport_request IMPLEMENTATION.
 
     IF mo_instance IS NOT BOUND.
 
-      mo_instance = NEW zz_cl_delete_transport_request( ).
+      mo_instance = NEW zcas_cl_delete_transport_req( ).
 
     ENDIF.
 
