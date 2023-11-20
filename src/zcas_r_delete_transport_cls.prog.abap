@@ -1,45 +1,53 @@
-CLASS zcas_cl_delete_transport_req DEFINITION
-  PUBLIC
+*&---------------------------------------------------------------------*
+*& Include zcas_r_delete_tr_cls
+*&---------------------------------------------------------------------*
+CLASS lcl_application DEFINITION
   FINAL
   CREATE PRIVATE .
 
   PUBLIC SECTION.
-    CLASS-METHODS get_instance
-      RETURNING VALUE(ro_instance) TYPE REF TO zcas_cl_delete_transport_req.
+    CLASS-METHODS get
+      RETURNING
+        VALUE(ro_instance) TYPE REF TO lcl_application.
 
     METHODS:
       execute
-        IMPORTING iv_user     TYPE as4user
-                  it_r_trkorr TYPE rseloption,
+        IMPORTING
+          iv_user     TYPE as4user
+          it_r_trkorr TYPE rseloption,
       on_value_request_so_tr
-        IMPORTING iv_user          TYPE as4user
-        RETURNING VALUE(rv_result) TYPE shvalue_d.
+        IMPORTING
+          iv_user          TYPE as4user
+        RETURNING
+          VALUE(rv_result) TYPE shvalue_d.
 
   PROTECTED SECTION.
-  PRIVATE SECTION.
     TYPES: t_e070 TYPE TABLE OF e070 WITH DEFAULT KEY.
 
-    CLASS-DATA: mo_instance   TYPE REF TO zcas_cl_delete_transport_req,
+    CLASS-DATA: mo_instance   TYPE REF TO lcl_application,
                 mv_user       TYPE as4user,
                 mt_trkorr     TYPE TABLE OF e070 WITH DEFAULT KEY,
                 mt_log        TYPE log_message_t,
+                mv_msg        TYPE string,
                 mo_salv_table TYPE REF TO cl_salv_table.
 
     METHODS:
       delete_tr,
       read_tr
-        IMPORTING it_r_trkorr TYPE rseloption,
+        IMPORTING
+          it_r_trkorr TYPE rseloption,
       unlock_tr,
       show_log,
       reopen_tr,
-      on_function_click_log_alv FOR EVENT added_function OF cl_salv_events_table
-        IMPORTING e_salv_function .
+      on_function_click_log_alv
+        FOR EVENT added_function OF cl_salv_events_table
+        IMPORTING
+          e_salv_function .
+
 ENDCLASS.
 
 
-
-CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
-
+CLASS lcl_application IMPLEMENTATION.
 
   METHOD delete_tr.
 
@@ -54,12 +62,16 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
       CASE sy-subrc.
         WHEN 0.
+          mv_msg = TEXT-001.
+          REPLACE '&1' IN mv_msg WITH <ls_strkorr>-trkorr.
           APPEND VALUE #( type    = 'S'
-                          message = |Transport request { <ls_strkorr>-trkorr } and its sub requests were successfully deleted.|  ) TO mt_log.
+                          message = mv_msg ) TO mt_log.
 
         WHEN OTHERS.
+          mv_msg = TEXT-002.
+          REPLACE '&1' IN mv_msg WITH <ls_strkorr>-trkorr.
           APPEND VALUE #( type    = 'W'
-                          message = |Transport request { <ls_strkorr>-trkorr } and its sub requests couldn't be deleted.|  ) TO mt_log.
+                          message = mv_msg  ) TO mt_log.
           CONTINUE.
 
       ENDCASE.
@@ -71,26 +83,26 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
   METHOD execute.
 
-    CLEAR: mt_log.
+    CASE sy-ucomm.
+      WHEN 'ONLI'.
+        CLEAR: mt_log.
+        mv_user = iv_user.
 
-    mv_user     = iv_user.
+        read_tr( it_r_trkorr ).
+        reopen_tr( ).
+        unlock_tr( ).
+        delete_tr( ).
+        show_log( ).
 
-    read_tr( it_r_trkorr ).
-    reopen_tr( ).
-    unlock_tr( ).
-    delete_tr( ).
-
-    show_log( ).
+    ENDCASE.
 
   ENDMETHOD.
 
 
-  METHOD get_instance.
+  METHOD get.
 
     IF mo_instance IS NOT BOUND.
-
-      mo_instance = NEW zcas_cl_delete_transport_req( ).
-
+      mo_instance = NEW lcl_application( ).
     ENDIF.
 
     ro_instance = mo_instance.
@@ -121,7 +133,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
         retfield       = 'TRKORR'
         dynpprog       = sy-repid
         dynpnr         = sy-dynnr
-        window_title   = 'Transport Request'
+        window_title   = TEXT-003
         value_org      = 'S'
       TABLES
         value_tab      = lt_help_values
@@ -130,7 +142,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
         OTHERS         = 1.
 
     IF sy-subrc <> 0.
-      MESSAGE 'Build of Search Help-Pop Up failed.' TYPE 'E' DISPLAY LIKE 'I'.
+      MESSAGE TEXT-004 TYPE 'E' DISPLAY LIKE 'I'.
     ENDIF.
 
     IF lines( lt_results ) > 0.
@@ -157,7 +169,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
         AND trkorr  IN @it_r_trkorr.
 
     IF lt_sel_requests IS INITIAL.
-      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
+      MESSAGE TEXT-005 TYPE 'E' DISPLAY LIKE 'W'.
     ENDIF.
 
     " Get all valid open parent requests
@@ -169,7 +181,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
         AND trstatus EQ 'D'.
 
     IF lt_all_parent_requests IS INITIAL.
-      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
+      MESSAGE TEXT-005 TYPE 'E' DISPLAY LIKE 'W'.
     ENDIF.
 
     DATA(lt_r_all_parent_requests) = VALUE rseloption( FOR <line1> IN lt_all_parent_requests
@@ -215,7 +227,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
           lt_r_sel_child_requests.
 
     IF mt_trkorr IS INITIAL.
-      MESSAGE 'No valid open transport request could be found.' TYPE 'E' DISPLAY LIKE 'W'.
+      MESSAGE TEXT-005 TYPE 'E' DISPLAY LIKE 'W'.
     ENDIF.
 
   ENDMETHOD.
@@ -268,7 +280,7 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
                                          start_line   = 4
                                          end_line     = 15 ).
 
-        mo_salv_table->get_display_settings( )->set_list_header( 'Log' ).
+        mo_salv_table->get_display_settings( )->set_list_header( TEXT-006 ).
         mo_salv_table->get_display_settings( )->set_striped_pattern( abap_true ).
         mo_salv_table->get_selections( )->set_selection_mode( if_salv_c_selection_mode=>none ).
 
@@ -280,17 +292,17 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
         lo_column ?= lo_columns->get_column( 'SEVERITY' ).
         lo_column->set_icon( if_salv_c_bool_sap=>true ).
-        lo_column->set_long_text( 'Severity' ).
+        lo_column->set_long_text( TEXT-007 ).
         lo_column->set_output_length( 5 ).
 
         lo_column ?= lo_columns->get_column( 'MESSAGE' ).
-        lo_column->set_long_text( 'Message' ).
+        lo_column->set_long_text( TEXT-008 ).
         lo_column->set_output_length( 72 ).
 
         mo_salv_table->display( ).
 
       CATCH cx_root.
-        MESSAGE 'Build of Log Table failed.' TYPE 'E' DISPLAY LIKE 'I'.
+        MESSAGE TEXT-009 TYPE 'E' DISPLAY LIKE 'I'.
 
     ENDTRY.
 
@@ -309,12 +321,16 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
       CASE sy-subrc.
         WHEN 0.
+          mv_msg = TEXT-010.
+          REPLACE '&1' IN mv_msg WITH <ls_trkorr>-trkorr.
           APPEND VALUE #( type    = 'S'
-                          message = |Transport request { <ls_trkorr>-trkorr } was successfully unlocked.|  ) TO mt_log.
+                          message = mv_msg  ) TO mt_log.
 
         WHEN OTHERS.
+          mv_msg = TEXT-011.
+          REPLACE '&1' IN mv_msg WITH <ls_trkorr>-trkorr.
           APPEND VALUE #( type    = 'W'
-                          message = |Transport request { <ls_trkorr>-trkorr } couldn't be unlocked.|  ) TO mt_log.
+                          message = mv_msg  ) TO mt_log.
           CONTINUE.
 
       ENDCASE.
@@ -340,12 +356,16 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
 
       CASE sy-subrc.
         WHEN 0.
+          mv_msg = TEXT-012.
+          REPLACE '&1' IN mv_msg WITH <ls_strkorr>-trkorr.
           APPEND VALUE #( type    = 'S'
-                          message = |Transport request { <ls_strkorr>-trkorr } was successfully reopened.|  ) TO mt_log.
+                          message = mv_msg  ) TO mt_log.
 
         WHEN OTHERS.
+          mv_msg = TEXT-013.
+          REPLACE '&1' IN mv_msg WITH <ls_strkorr>-trkorr.
           APPEND VALUE #( type    = 'E'
-                          message = |Transport request { <ls_strkorr>-trkorr } couldn't be reopened.|  ) TO mt_log.
+                          message = mv_msg  ) TO mt_log.
           CONTINUE.
 
       ENDCASE.
@@ -355,4 +375,5 @@ CLASS zcas_cl_delete_transport_req IMPLEMENTATION.
     COMMIT WORK AND WAIT.
 
   ENDMETHOD.
+
 ENDCLASS.
